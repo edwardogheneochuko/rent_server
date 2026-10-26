@@ -1,0 +1,319 @@
+{
+  "info": {
+    "name": "RentRight Naija — Phase 2 (Listings, Reviews, Scams, Insights, Admin)",
+    "description": "Run `npm run seed` first, then run this collection top to bottom (Collection Runner). Each folder signs in as the right user; Postman keeps the rr_token cookie between requests. Ids are saved into collection variables as you go.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    { "key": "baseUrl", "value": "http://localhost:5000/api" },
+    { "key": "adminEmail", "value": "admin@rentright.ng" },
+    { "key": "adminPassword", "value": "ChangeMe123" },
+    { "key": "listingId", "value": "" },
+    { "key": "agentProfileId", "value": "" },
+    { "key": "reviewId", "value": "" },
+    { "key": "scamId", "value": "" },
+    { "key": "tenantEmail", "value": "" }
+  ],
+  "item": [
+    {
+      "name": "Public",
+      "item": [
+        {
+          "name": "Listings: Lekki 2-bedrooms, cheapest first",
+          "event": [{ "listen": "test", "script": { "exec": [
+            "pm.test('Status 200', () => pm.response.to.have.status(200));",
+            "const { items, pagination } = pm.response.json().data;",
+            "pm.test('Has pagination', () => pm.expect(pagination).to.have.property('total'));",
+            "pm.test('All are Lekki 2-bedrooms', () => items.forEach(l => { pm.expect(l.propertyId.area).to.match(/^Lekki/); pm.expect(l.propertyId.type).to.eql('2-bedroom'); }));",
+            "pm.test('Sorted by total move-in cost', () => { for (let i = 1; i < items.length; i++) pm.expect(items[i].totalMoveInCost).to.be.at.least(items[i-1].totalMoveInCost); });"
+          ] } }],
+          "request": { "method": "GET", "url": "{{baseUrl}}/listings?area=Lekki&type=2-bedroom&sort=cheapest" }
+        },
+        {
+          "name": "Listings: Abuja under ₦2m, page 1",
+          "event": [{ "listen": "test", "script": { "exec": [
+            "pm.test('Status 200', () => pm.response.to.have.status(200));",
+            "const { items } = pm.response.json().data;",
+            "pm.test('Rent within budget', () => items.forEach(l => pm.expect(l.rent).to.be.at.most(2000000)));",
+            "pm.test('All in FCT', () => items.forEach(l => pm.expect(l.propertyId.state).to.eql('FCT')));",
+            "if (items[0]) pm.collectionVariables.set('listingId', items[0]._id);"
+          ] } }],
+          "request": { "method": "GET", "url": "{{baseUrl}}/listings?state=abuja&maxRent=2000000&limit=5&page=1" }
+        },
+        {
+          "name": "Listing detail",
+          "event": [{ "listen": "test", "script": { "exec": [
+            "pm.test('Status 200', () => pm.response.to.have.status(200));",
+            "const { listing } = pm.response.json().data;",
+            "pm.test('Has naira cost breakdown', () => pm.expect(listing.costBreakdown.total).to.match(/^₦[\\d,]+$/));",
+            "pm.test('Total = sum of fees', () => pm.expect(listing.totalMoveInCost).to.eql(listing.rent + listing.agentFee + listing.legalFee + listing.caution + listing.serviceCharge));"
+          ] } }],
+          "request": { "method": "GET", "url": "{{baseUrl}}/listings/{{listingId}}" }
+        },
+        {
+          "name": "Listings: invalid filter (expect 422)",
+          "event": [{ "listen": "test", "script": { "exec": ["pm.test('Status 422', () => pm.response.to.have.status(422));"] } }],
+          "request": { "method": "GET", "url": "{{baseUrl}}/listings?type=castle" }
+        },
+        {
+          "name": "Scam check: phone in +234 format",
+          "event": [{ "listen": "test", "script": { "exec": [
+            "pm.test('Status 200', () => pm.response.to.have.status(200));",
+            "const result = pm.response.json().data;",
+            "pm.test('Flagged', () => pm.expect(result.flagged).to.be.true);",
+            "pm.test('Reporter hidden', () => pm.expect(result.items[0]).to.not.have.property('reporterId'));"
+          ] } }],
+          "request": { "method": "GET", "url": "{{baseUrl}}/scams/check?query=%2B234%20800%20000%200901" }
+        },
+        {
+          "name": "Scam check: account number",
+          "event": [{ "listen": "test", "script": { "exec": ["pm.test('Flagged', () => pm.expect(pm.response.json().data.flagged).to.be.true);"] } }],
+          "request": { "method": "GET", "url": "{{baseUrl}}/scams/check?query=9000000002" }
+        },
+        {
+          "name": "Scam check: pending report stays hidden",
+          "event": [{ "listen": "test", "script": { "exec": ["pm.test('Not flagged', () => pm.expect(pm.response.json().data.flagged).to.be.false);"] } }],
+          "request": { "method": "GET", "url": "{{baseUrl}}/scams/check?query=08000000906" }
+        },
+        {
+          "name": "Insights: Lagos rent by type",
+          "event": [{ "listen": "test", "script": { "exec": [
+            "pm.test('Status 200', () => pm.response.to.have.status(200));",
+            "const rows = pm.response.json().data.byType;",
+            "pm.test('Has rows', () => pm.expect(rows.length).to.be.above(0));",
+            "pm.test('min <= avg <= max', () => rows.forEach(r => { pm.expect(r.minRent).to.be.at.most(r.averageRent + 1000); pm.expect(r.averageRent).to.be.at.most(r.maxRent + 1000); }));"
+          ] } }],
+          "request": { "method": "GET", "url": "{{baseUrl}}/insights/rent?state=Lagos" }
+        },
+        {
+          "name": "Insights: areas",
+          "event": [{ "listen": "test", "script": { "exec": ["pm.test('Status 200', () => pm.response.to.have.status(200));"] } }],
+          "request": { "method": "GET", "url": "{{baseUrl}}/insights/areas" }
+        }
+      ]
+    },
+    {
+      "name": "Agent: create and edit a listing",
+      "item": [
+        {
+          "name": "Login as agent (Segun)",
+          "event": [{ "listen": "test", "script": { "exec": [
+            "pm.test('Status 200', () => pm.response.to.have.status(200));",
+            "pm.collectionVariables.set('agentProfileId', pm.response.json().data.profile._id);"
+          ] } }],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": "{{baseUrl}}/auth/login",
+            "body": { "mode": "raw", "raw": "{ \"email\": \"segun.agent@rentright.test\", \"password\": \"Password123\" }" }
+          }
+        },
+        {
+          "name": "Create listing with a new property",
+          "event": [{ "listen": "test", "script": { "exec": [
+            "pm.test('Status 201', () => pm.response.to.have.status(201));",
+            "const { listing } = pm.response.json().data;",
+            "pm.test('Total computed', () => pm.expect(listing.totalMoveInCost).to.eql(1950000));",
+            "pm.test('Agent set automatically', () => pm.expect(listing.agentId._id).to.eql(pm.collectionVariables.get('agentProfileId')));",
+            "pm.collectionVariables.set('listingId', listing._id);"
+          ] } }],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": "{{baseUrl}}/listings",
+            "body": { "mode": "raw", "raw": "{\n  \"property\": {\n    \"address\": \"14 Akoka Road\",\n    \"area\": \"Yaba\",\n    \"state\": \"Lagos\",\n    \"type\": \"mini-flat\",\n    \"amenities\": [\"prepaid meter\", \"borehole\"],\n    \"coordinates\": { \"lat\": 6.515, \"lng\": 3.389 }\n  },\n  \"landlord\": { \"name\": \"Mr Adewale\", \"phone\": \"08000000999\" },\n  \"rent\": 1500000,\n  \"agentFee\": 150000,\n  \"legalFee\": 150000,\n  \"caution\": 100000,\n  \"serviceCharge\": 50000\n}" }
+          }
+        },
+        {
+          "name": "Edit listing (total recalculates)",
+          "event": [{ "listen": "test", "script": { "exec": [
+            "pm.test('Status 200', () => pm.response.to.have.status(200));",
+            "pm.test('New total', () => pm.expect(pm.response.json().data.listing.totalMoveInCost).to.eql(2250000));"
+          ] } }],
+          "request": {
+            "method": "PATCH",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": "{{baseUrl}}/listings/{{listingId}}",
+            "body": { "mode": "raw", "raw": "{ \"rent\": 1800000, \"status\": \"taken\" }" }
+          }
+        },
+        {
+          "name": "My listings",
+          "event": [{ "listen": "test", "script": { "exec": ["pm.test('Status 200', () => pm.response.to.have.status(200));"] } }],
+          "request": { "method": "GET", "url": "{{baseUrl}}/listings/mine" }
+        }
+      ]
+    },
+    {
+      "name": "Tenant: review and report",
+      "item": [
+        {
+          "name": "Register a new tenant",
+          "event": [
+            { "listen": "prerequest", "script": { "exec": ["pm.collectionVariables.set('tenantEmail', `tenant${Date.now()}@rentright.test`);"] } },
+            { "listen": "test", "script": { "exec": ["pm.test('Status 201', () => pm.response.to.have.status(201));"] } }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": "{{baseUrl}}/auth/register",
+            "body": { "mode": "raw", "raw": "{ \"name\": \"Bisi Ade\", \"email\": \"{{tenantEmail}}\", \"password\": \"Password123\" }" }
+          }
+        },
+        {
+          "name": "Tenant cannot create listings (expect 403)",
+          "event": [{ "listen": "test", "script": { "exec": ["pm.test('Status 403', () => pm.response.to.have.status(403));"] } }],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": "{{baseUrl}}/listings",
+            "body": { "mode": "raw", "raw": "{}" }
+          }
+        },
+        {
+          "name": "Tenant cannot edit someone else's listing (expect 403)",
+          "event": [{ "listen": "test", "script": { "exec": ["pm.test('Status 403', () => pm.response.to.have.status(403));"] } }],
+          "request": {
+            "method": "PATCH",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": "{{baseUrl}}/listings/{{listingId}}",
+            "body": { "mode": "raw", "raw": "{ \"rent\": 1 }" }
+          }
+        },
+        {
+          "name": "Review the agent",
+          "event": [{ "listen": "test", "script": { "exec": [
+            "pm.test('Status 201', () => pm.response.to.have.status(201));",
+            "const { review } = pm.response.json().data;",
+            "pm.test('Starts pending', () => pm.expect(review.status).to.eql('pending'));",
+            "pm.collectionVariables.set('reviewId', review._id);"
+          ] } }],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": "{{baseUrl}}/reviews",
+            "body": { "mode": "raw", "raw": "{\n  \"targetType\": \"agent\",\n  \"targetId\": \"{{agentProfileId}}\",\n  \"ratings\": { \"overall\": 2 },\n  \"text\": \"Came late to every inspection and pushed me to pay before seeing documents.\"\n}" }
+          }
+        },
+        {
+          "name": "Review the same agent again (expect 409)",
+          "event": [{ "listen": "test", "script": { "exec": ["pm.test('Status 409', () => pm.response.to.have.status(409));"] } }],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": "{{baseUrl}}/reviews",
+            "body": { "mode": "raw", "raw": "{\n  \"targetType\": \"agent\",\n  \"targetId\": \"{{agentProfileId}}\",\n  \"ratings\": { \"overall\": 5 },\n  \"text\": \"Trying to leave a second review for the same agent.\"\n}" }
+          }
+        },
+        {
+          "name": "Report a scam",
+          "event": [{ "listen": "test", "script": { "exec": [
+            "pm.test('Status 201', () => pm.response.to.have.status(201));",
+            "pm.collectionVariables.set('scamId', pm.response.json().data.report._id);"
+          ] } }],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": "{{baseUrl}}/scams",
+            "body": { "mode": "raw", "raw": "{\n  \"name\": \"Fake Caretaker Ikeja\",\n  \"phone\": \"0800 000 0777\",\n  \"accountNumber\": \"9000000777\",\n  \"bankName\": \"Opay\",\n  \"description\": \"Pretended to be the caretaker and collected rent for a flat he does not manage.\"\n}" }
+          }
+        },
+        {
+          "name": "My reviews",
+          "event": [{ "listen": "test", "script": { "exec": ["pm.test('Has 1 pending review', () => pm.expect(pm.response.json().data.items[0].status).to.eql('pending'));"] } }],
+          "request": { "method": "GET", "url": "{{baseUrl}}/reviews/mine" }
+        }
+      ]
+    },
+    {
+      "name": "Admin: moderate",
+      "item": [
+        {
+          "name": "Login as admin",
+          "event": [{ "listen": "test", "script": { "exec": ["pm.test('Admin role', () => pm.expect(pm.response.json().data.user.role).to.eql('admin'));"] } }],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": "{{baseUrl}}/auth/login",
+            "body": { "mode": "raw", "raw": "{ \"email\": \"{{adminEmail}}\", \"password\": \"{{adminPassword}}\" }" }
+          }
+        },
+        {
+          "name": "Pending queue",
+          "event": [{ "listen": "test", "script": { "exec": [
+            "pm.test('Status 200', () => pm.response.to.have.status(200));",
+            "const result = pm.response.json().data;",
+            "pm.test('Has reviews and scams', () => { pm.expect(result).to.have.property('reviews'); pm.expect(result).to.have.property('scams'); });"
+          ] } }],
+          "request": { "method": "GET", "url": "{{baseUrl}}/admin/pending" }
+        },
+        {
+          "name": "Approve review (rating recalculated)",
+          "event": [{ "listen": "test", "script": { "exec": [
+            "pm.test('Status 200', () => pm.response.to.have.status(200));",
+            "pm.test('Stats returned', () => pm.expect(pm.response.json().data.targetStats.reviewCount).to.be.above(0));"
+          ] } }],
+          "request": {
+            "method": "PATCH",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": "{{baseUrl}}/admin/reviews/{{reviewId}}",
+            "body": { "mode": "raw", "raw": "{ \"status\": \"approved\" }" }
+          }
+        },
+        {
+          "name": "Confirm scam report",
+          "event": [{ "listen": "test", "script": { "exec": ["pm.test('Confirmed', () => pm.expect(pm.response.json().data.report.status).to.eql('confirmed'));"] } }],
+          "request": {
+            "method": "PATCH",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": "{{baseUrl}}/admin/scams/{{scamId}}",
+            "body": { "mode": "raw", "raw": "{ \"status\": \"confirmed\" }" }
+          }
+        },
+        {
+          "name": "Scam check now finds it",
+          "event": [{ "listen": "test", "script": { "exec": ["pm.test('Flagged', () => pm.expect(pm.response.json().data.flagged).to.be.true);"] } }],
+          "request": { "method": "GET", "url": "{{baseUrl}}/scams/check?query=08000000777" }
+        }
+      ]
+    },
+    {
+      "name": "Agent: reply and clean up",
+      "item": [
+        {
+          "name": "Login as agent again",
+          "event": [{ "listen": "test", "script": { "exec": ["pm.test('Status 200', () => pm.response.to.have.status(200));"] } }],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": "{{baseUrl}}/auth/login",
+            "body": { "mode": "raw", "raw": "{ \"email\": \"segun.agent@rentright.test\", \"password\": \"Password123\" }" }
+          }
+        },
+        {
+          "name": "Reply to the review",
+          "event": [{ "listen": "test", "script": { "exec": [
+            "pm.test('Status 200', () => pm.response.to.have.status(200));",
+            "pm.test('Author shortened', () => pm.expect(pm.response.json().data.review.author.name).to.eql('Bisi A.'));"
+          ] } }],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": "{{baseUrl}}/reviews/{{reviewId}}/reply",
+            "body": { "mode": "raw", "raw": "{ \"text\": \"Sorry about the delays. We now confirm every inspection a day before.\" }" }
+          }
+        },
+        {
+          "name": "Agent profile shows new rating",
+          "event": [{ "listen": "test", "script": { "exec": ["pm.test('Claimed', () => pm.expect(pm.response.json().data.profile.claimed).to.be.true);"] } }],
+          "request": { "method": "GET", "url": "{{baseUrl}}/agents/{{agentProfileId}}" }
+        },
+        {
+          "name": "Delete the test listing",
+          "event": [{ "listen": "test", "script": { "exec": ["pm.test('Status 200', () => pm.response.to.have.status(200));"] } }],
+          "request": { "method": "DELETE", "url": "{{baseUrl}}/listings/{{listingId}}" }
+        }
+      ]
+    }
+  ]
+}

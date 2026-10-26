@@ -1,0 +1,32 @@
+# Dependencies (reinstalled with `npm install`)
+node_modules/
+
+# Environment files: they hold the database password and JWT secret.
+# .env.example is the template and IS committed.
+.env
+.env.*
+*.env
+!.env.example
+
+# Anything that looks like downloaded credentials
+*credentials*
+
+# Cookie jars from the curl tests in README.md (they contain login tokens)
+cookies.txt
+agent.txt
+tenant.txt
+admin.txt
+
+# Logs and test output
+*.log
+npm-debug.log*
+coverage/
+
+# Editors and OS junk
+.vscode/*
+!.vscode/extensions.json
+.idea/
+*.swp
+.DS_Store
+Thumbs.db
+desktop.ini

@@ -1,0 +1,203 @@
+{
+  "info": {
+    "name": "RentRight Naija — Phase 1 (Auth)",
+    "description": "Run the requests top to bottom (or use the Collection Runner). Postman stores the rr_token cookie automatically after Register/Login, so 'Me' works without extra setup.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    { "key": "baseUrl", "value": "http://localhost:5000/api" },
+    { "key": "email", "value": "" }
+  ],
+  "item": [
+    {
+      "name": "1. Health check",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test('Status 200', () => pm.response.to.have.status(200));",
+              "pm.test('Database connected', () => pm.expect(pm.response.json().data.database).to.eql('connected'));"
+            ]
+          }
+        }
+      ],
+      "request": { "method": "GET", "url": "{{baseUrl}}/health" }
+    },
+    {
+      "name": "2. Register tenant",
+      "event": [
+        {
+          "listen": "prerequest",
+          "script": {
+            "exec": [
+              "// Use a fresh email each run so the request never hits 'already exists'",
+              "pm.collectionVariables.set('email', `tenant${Date.now()}@example.com`);"
+            ]
+          }
+        },
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test('Status 201', () => pm.response.to.have.status(201));",
+              "const user = pm.response.json().data.user;",
+              "pm.test('No password in response', () => pm.expect(user).to.not.have.property('passwordHash'));",
+              "pm.test('Phone normalised', () => pm.expect(user.phone).to.eql('2348031234567'));",
+              "pm.test('Auth cookie set', () => pm.expect(pm.cookies.has('rr_token')).to.be.true);"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "header": [{ "key": "Content-Type", "value": "application/json" }],
+        "url": "{{baseUrl}}/auth/register",
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"name\": \"Ada Obi\",\n  \"email\": \"{{email}}\",\n  \"password\": \"Password123\",\n  \"phone\": \"+234 803 123 4567\"\n}"
+        }
+      }
+    },
+    {
+      "name": "3. Register duplicate email (expect 409)",
+      "event": [
+        {
+          "listen": "test",
+          "script": { "exec": ["pm.test('Status 409', () => pm.response.to.have.status(409));"] }
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "header": [{ "key": "Content-Type", "value": "application/json" }],
+        "url": "{{baseUrl}}/auth/register",
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"name\": \"Ada Obi\",\n  \"email\": \"{{email}}\",\n  \"password\": \"Password123\"\n}"
+        }
+      }
+    },
+    {
+      "name": "4. Register with invalid fields (expect 422)",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test('Status 422', () => pm.response.to.have.status(422));",
+              "pm.test('Field details returned', () => pm.expect(pm.response.json().error.details.length).to.be.above(0));"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "header": [{ "key": "Content-Type", "value": "application/json" }],
+        "url": "{{baseUrl}}/auth/register",
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"name\": \"A\",\n  \"email\": \"not-an-email\",\n  \"password\": \"short\",\n  \"role\": \"admin\",\n  \"phone\": \"12345\"\n}"
+        }
+      }
+    },
+    {
+      "name": "5. Register agent (creates Agent profile)",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test('Status 201', () => pm.response.to.have.status(201));",
+              "pm.test('Agent profile created', () => pm.expect(pm.response.json().data.profile).to.have.property('userId'));"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "header": [{ "key": "Content-Type", "value": "application/json" }],
+        "url": "{{baseUrl}}/auth/register",
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"name\": \"Tunde Bakare\",\n  \"email\": \"agent{{$timestamp}}@example.com\",\n  \"password\": \"Password123\",\n  \"role\": \"agent\",\n  \"phone\": \"08051112222\"\n}"
+        }
+      }
+    },
+    {
+      "name": "6. Login with wrong password (expect 401)",
+      "event": [
+        {
+          "listen": "test",
+          "script": { "exec": ["pm.test('Status 401', () => pm.response.to.have.status(401));"] }
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "header": [{ "key": "Content-Type", "value": "application/json" }],
+        "url": "{{baseUrl}}/auth/login",
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"email\": \"{{email}}\",\n  \"password\": \"WrongPass1\"\n}"
+        }
+      }
+    },
+    {
+      "name": "7. Login",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test('Status 200', () => pm.response.to.have.status(200));",
+              "pm.test('Auth cookie set', () => pm.expect(pm.cookies.has('rr_token')).to.be.true);"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "header": [{ "key": "Content-Type", "value": "application/json" }],
+        "url": "{{baseUrl}}/auth/login",
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"email\": \"{{email}}\",\n  \"password\": \"Password123\"\n}"
+        }
+      }
+    },
+    {
+      "name": "8. Me (signed in)",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test('Status 200', () => pm.response.to.have.status(200));",
+              "pm.test('Correct user', () => pm.expect(pm.response.json().data.user.email).to.eql(pm.collectionVariables.get('email')));"
+            ]
+          }
+        }
+      ],
+      "request": { "method": "GET", "url": "{{baseUrl}}/auth/me" }
+    },
+    {
+      "name": "9. Logout",
+      "event": [
+        {
+          "listen": "test",
+          "script": { "exec": ["pm.test('Status 200', () => pm.response.to.have.status(200));"] }
+        }
+      ],
+      "request": { "method": "POST", "url": "{{baseUrl}}/auth/logout" }
+    },
+    {
+      "name": "10. Me after logout (expect 401)",
+      "event": [
+        {
+          "listen": "test",
+          "script": { "exec": ["pm.test('Status 401', () => pm.response.to.have.status(401));"] }
+        }
+      ],
+      "request": { "method": "GET", "url": "{{baseUrl}}/auth/me" }
+    }
+  ]
+}
